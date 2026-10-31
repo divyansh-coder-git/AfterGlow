@@ -286,7 +286,7 @@ def classify_image(image, image_features=None):
     #     and top_score >= 0.20
     #     and margin >= 0.01
     # )
-    is_expressive = (top_category in EXPRESSIVE_CATEGORIES or top_score >= 0.2)
+    is_expressive = (top_category in EXPRESSIVE_CATEGORIES and top_score >= 0.15)
 
     return {
         "category": top_category,
@@ -302,7 +302,6 @@ def classify_image(image, image_features=None):
 # =====================================================
 
 def analyze_mood(image, image_features=None):
-    # Reuse embedding if already calculated
     if image_features is None:
         image_features = encode_image(image)
 

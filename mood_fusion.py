@@ -97,7 +97,7 @@ def calculate_visual_scores(features):
         visual_scores[mood] = sum(scores) / len(scores)
     return visual_scores
 
-def fuse_mood_scores(clip_scores, visual_scores, alpha=0.65):
+def fuse_mood_scores(clip_scores, visual_scores, alpha=0.7):
     # 1. Extract minimum and maximum CLIP scores
     clip_values = list(clip_scores.values())
     min_score = min(clip_values)

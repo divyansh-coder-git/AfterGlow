@@ -33,8 +33,33 @@ def extract_features(image):
     )
 
     warm_mask = cv2.bitwise_or(warm_mask_1, warm_mask_2)
-
     warm_ratio = np.count_nonzero(warm_mask) / warm_mask.size
+
+    # 7. Calculate edge density
+    edges = cv2.Canny(gray, 100, 200)
+
+    edge_density = np.count_nonzero(edges) / edges.size
+
+    # 8. Calculate local contrast
+    height, width = gray.shape
+
+    grid_size = 4
+    local_contrasts = []
+    for row in range(grid_size):
+        for col in range(grid_size):
+
+            y1 = row * height // grid_size
+            y2 = (row + 1) * height // grid_size
+
+            x1 = col * width // grid_size
+            x2 = (col + 1) * width // grid_size
+
+            region = gray[y1:y2, x1:x2]
+
+            local_contrasts.append(np.std(region))
+
+    local_contrast = np.mean(local_contrasts)
+
     kmeans_start = time.perf_counter()
 
     # 7. Find dominant colours using K-Means
@@ -66,14 +91,10 @@ def extract_features(image):
         cv2.KMEANS_PP_CENTERS
     )
 
-    # Calculate how frequently each cluster occurs
     counts = np.bincount(labels.flatten())
-
-    # Sort clusters by frequency
     sorted_indices = np.argsort(counts)[::-1]
-
     dominant_colors = centers[sorted_indices].astype(np.uint8)
-    
+    color_ratios = counts[sorted_indices] / len(labels)
 
     print("K-Means time:", round(time.perf_counter() - kmeans_start, 4), "seconds")
     print("Total feature extraction time:", round(time.perf_counter() - start_time, 4),"seconds")
@@ -83,5 +104,10 @@ def extract_features(image):
         "contrast": float(contrast),
         "saturation": float(saturation),
         "warm_ratio": float(warm_ratio),
-        "dominant_colors": dominant_colors.tolist()
+
+        "edge_density": float(edge_density),
+        "local_contrast": float(local_contrast),
+
+        "dominant_colors": dominant_colors.tolist(),
+        "color_ratios": color_ratios.tolist()
     }

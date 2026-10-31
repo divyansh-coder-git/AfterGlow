@@ -451,7 +451,7 @@ features = {
 
 result = generate_final_explanation("romantic", features)
 
-print(result["text"])
+# print(result["text"])
 
 print(
     f"\nEvidence support: "
