@@ -180,8 +180,8 @@ category_tokens = tokenizer(category_texts).to(device)
 
 
 with torch.inference_mode():
-    mood_text_features = model.encode_text(mood_tokens)
-    category_text_features = model.encode_text(category_tokens)
+    mood_text_features = model.encode_text(mood_tokens) # type: ignore
+    category_text_features = model.encode_text(category_tokens) # type: ignore
 
     # Normalize embeddings
     mood_text_features /= mood_text_features.norm(
@@ -215,11 +215,11 @@ def encode_image(image):
     pil_image = Image.fromarray(image_rgb)
 
     # Apply CLIP preprocessing
-    image_input = preprocess(pil_image).unsqueeze(0).to(device)
+    image_input = preprocess(pil_image).unsqueeze(0).to(device) # type: ignore
 
     # Generate image embedding
     with torch.inference_mode():
-        image_features = model.encode_image(image_input)
+        image_features = model.encode_image(image_input) # type: ignore
         image_features /= image_features.norm(
             dim=-1,
             keepdim=True
@@ -256,13 +256,21 @@ def calculate_similarity(image_features, text_features, names):
 # 7. IMAGE CONTEXT CLASSIFICATION
 # =====================================================
 
-def classify_image(image):
-    image_features = encode_image(image)
+def classify_image(image, image_features=None):
+    if image_features is None:
+        image_features = encode_image(image)
+
     scores = calculate_similarity(
         image_features,
         category_text_features,
         category_names
     )
+    # image_features = encode_image(image)
+    # scores = calculate_similarity(
+    #     image_features,
+    #     category_text_features,
+    #     category_names
+    # )
 
     ranked_categories = list(scores.items())
     top_category, top_score = ranked_categories[0]
@@ -278,7 +286,7 @@ def classify_image(image):
     #     and top_score >= 0.20
     #     and margin >= 0.01
     # )
-    is_expressive = (top_category in EXPRESSIVE_CATEGORIES and top_score >= 0.18)
+    is_expressive = (top_category in EXPRESSIVE_CATEGORIES or top_score >= 0.2)
 
     return {
         "category": top_category,
