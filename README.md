@@ -240,7 +240,7 @@ AFTERGLOW/
 
 ---
 
-## 🔬 Design Philosophy
+## Design Philosophy
 
 AFTERGLOW is built around three principles:
 
