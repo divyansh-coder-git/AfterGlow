@@ -121,10 +121,11 @@ $$
 
 Where:
 
-* \(F_m\): Final score for mood \(m\).
-* \(C'_m\): Normalized CLIP similarity score.
-* \(V_m\): Handcrafted visual score.
-* \(\alpha\): Weight controlling the contribution of semantic analysis.
+* $ F_m $: Final score for mood `m`.
+* $ C'_m $: Normalized CLIP similarity score.
+* $ V_m $: Handcrafted visual score.
+* $ α $: Weight controlling the contribution of semantic analysis.
+
 
 This allows both semantic information and measurable visual characteristics to influence the final interpretation.
 
