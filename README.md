@@ -190,7 +190,7 @@ A dedicated GPU is not required. CPU inference is supported, although performanc
 ```bash
 git clone https://github.com/divyansh-coder-git/AfterGlow.git
 
-cd AFTERGLOW
+cd AfterGlow
 ```
 
 ### 2. Create a virtual environment
