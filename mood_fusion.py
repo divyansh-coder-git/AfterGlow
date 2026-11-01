@@ -194,8 +194,6 @@ def normalize_clip_scores(clip_scores):
     clip_values = np.array(clip_scores)
     # CLIP_LOW = np.percentile(clip_values, 5)
     # CLIP_HIGH = np.percentile(clip_values, 95)
-    print("CLIP_LOW:", CLIP_LOW)
-    print("CLIP_HIGH:", CLIP_HIGH)
     for mood, score in clip_scores.items():
         normalized[mood] = float(np.clip((score - CLIP_LOW) /(CLIP_HIGH - CLIP_LOW),0,1))
     return normalized

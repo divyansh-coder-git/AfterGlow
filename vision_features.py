@@ -125,8 +125,8 @@ def extract_features(image):
     dominant_colors = centers[sorted_indices].astype(np.uint8)
     color_ratios = counts[sorted_indices] / len(labels)
 
-    print("K-Means time:", round(time.perf_counter() - kmeans_start, 4), "seconds")
-    print("Total feature extraction time:", round(time.perf_counter() - start_time, 4),"seconds")
+    # print("K-Means time:", round(time.perf_counter() - kmeans_start, 4), "seconds")
+    # print("Total feature extraction time:", round(time.perf_counter() - start_time, 4),"seconds")
     # 8. Return extracted features
     return {
         "brightness": float(brightness),
