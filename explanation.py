@@ -363,10 +363,10 @@ def generate_explanation(mood, features):
         mood_text = MOOD_EVIDENCE_TEXT.get(mood, {})
         feature_text = mood_text.get(feature, {})
 
-        description = feature_text.get(level)
+        description = feature_text.get(level) # type: ignore
 
         if description:
-            explanation.append(description)
+            explanation.append(description) # type: ignore
 
     return " ".join(explanation)
 

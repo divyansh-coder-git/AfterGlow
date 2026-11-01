@@ -517,8 +517,8 @@ if "result" in st.session_state:
 
         st.info(
             "This image appears to contain primarily technical "
-            "or informational content. A conventional emotional "
-            "interpretation may not be meaningful."
+            "/ informational content or a living portrait. A conventional emotional "
+            "interpretation may not be meaningful and this model do not support human emotion classification."
         )
 
         st.markdown(
@@ -528,7 +528,7 @@ if "result" in st.session_state:
         st.write(
             "AFTERGLOW first examines the visual context of an image. "
             "It avoids forcing an emotional interpretation when the "
-            "image is classified as technical or document-like."
+            "image is classified as technical or document-like. It also does not support human emotion classification."
         )
 
     else:
