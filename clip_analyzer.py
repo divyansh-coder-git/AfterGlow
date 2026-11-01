@@ -144,7 +144,6 @@ IMAGE_CATEGORIES = {
 
 EXPRESSIVE_CATEGORIES = {
     "landscape",
-    "portrait",
     "architecture",
     "abstract_art",
     "cityscape",
