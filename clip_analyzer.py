@@ -136,7 +136,8 @@ IMAGE_CATEGORIES = {
 
     "cityscape":
         "A photograph of an urban city environment, including "
-        "streets, skyscrapers, buildings, traffic and city lights."
+        "streets, skyscrapers, buildings, traffic and city lights.",
+    "nature": "A photograph of plants, flowers, trees, foliage, gardens or natural vegetation." 
 }
 
 # Categories suitable for our ordinary mood interpretation
@@ -146,14 +147,18 @@ EXPRESSIVE_CATEGORIES = {
     "portrait",
     "architecture",
     "abstract_art",
-    "cityscape"
+    "cityscape",
+    "nature"
 }
 
 # =====================================================
 # 3. LOAD CLIP MODEL
 # =====================================================
 
-device = "cpu"
+device = "cuda" if torch.cuda.is_available() else "cpu"
+print(f"CLIP running on: {device}")
+if device == "cuda":
+    print(f"GPU: {torch.cuda.get_device_name(0)}")
 model, _, preprocess = open_clip.create_model_and_transforms(
     "ViT-B-32",
     pretrained="laion2b_s34b_b79k",

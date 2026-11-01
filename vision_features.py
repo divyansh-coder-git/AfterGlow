@@ -2,6 +2,8 @@ import cv2
 import numpy as np
 import time
 
+SEED = 42
+
 def extract_features(image):
     start_time = time.perf_counter()
     # 1. Convert to grayscale
@@ -32,8 +34,16 @@ def extract_features(image):
         np.array([179, 255, 255])
     )
 
+    cool_mask = cv2.inRange(
+        hsv,
+        np.array([36, 50, 50]),
+        np.array([135, 255, 255])
+    )
+
     warm_mask = cv2.bitwise_or(warm_mask_1, warm_mask_2)
     warm_ratio = np.count_nonzero(warm_mask) / warm_mask.size
+
+    cool_ratio = np.count_nonzero(cool_mask) / cool_mask.size
 
     # 7. Calculate edge density
     edges = cv2.Canny(gray, 100, 200)
@@ -64,34 +74,53 @@ def extract_features(image):
 
     # 7. Find dominant colours using K-Means
 
-    pixels = image.reshape((-1, 3)).astype(np.float32)
+    flat_pixels = image.reshape((-1, 3))
+    rng = np.random.default_rng(SEED)
 
-    # Randomly sample 10,000 pixels
-    if len(pixels) > 10000:
-        indices = np.random.choice(
-            len(pixels),
-            10000,
+    MAX_SAMPLES = 10000
+
+    if len(flat_pixels) > MAX_SAMPLES:
+
+        indices = rng.choice(
+            len(flat_pixels),
+            MAX_SAMPLES,
             replace=False
         )
 
-        pixels = pixels[indices]
+        sampled_pixels = flat_pixels[indices]
+
+    else:
+        sampled_pixels = flat_pixels
+
+    pixels = np.ascontiguousarray(
+        sampled_pixels,
+        dtype=np.float32
+    )
 
     criteria = (
         cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_MAX_ITER,
         50,
-        0.2
+        0.5
     )
 
-    compactness, labels, centers = cv2.kmeans(
+    cv2.setRNGSeed(SEED)
+
+    # 5. Execute K-Means
+    compactness, labels, centers = cv2.kmeans( #type: ignore
         pixels,
         5,
-        None,
+        None, #type: ignore
         criteria,
-        3,
+        1,
         cv2.KMEANS_PP_CENTERS
     )
 
-    counts = np.bincount(labels.flatten())
+    # 6. Calculate colour proportions
+    counts = np.bincount(
+        labels.flatten(),
+        minlength=5
+    )
+
     sorted_indices = np.argsort(counts)[::-1]
     dominant_colors = centers[sorted_indices].astype(np.uint8)
     color_ratios = counts[sorted_indices] / len(labels)
@@ -109,5 +138,6 @@ def extract_features(image):
         "local_contrast": float(local_contrast),
 
         "dominant_colors": dominant_colors.tolist(),
-        "color_ratios": color_ratios.tolist()
+        "color_ratios": color_ratios.tolist(),
+        "cool_ratio": float(cool_ratio)
     }

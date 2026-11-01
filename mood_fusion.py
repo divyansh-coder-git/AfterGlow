@@ -1,133 +1,224 @@
-MOOD_RULES = {
-    "serene": {
-        "brightness": "medium_high",
-        "saturation": "low_medium",
-        "warm_ratio": "low"
-    },
+import numpy as np
+CLIP_LOW = 0.12187
+CLIP_HIGH = 0.243395
+MOODS = [
+    "serene",
+    "melancholic",
+    "energetic",
+    "mysterious",
+    "nostalgic",
+    "romantic",
+    "dramatic",
+    "hopeful"
+]
 
-    "melancholic": {
-        "brightness": "low",
-        "saturation": "low",
-        "warm_ratio": "low"
-    },
 
-    "energetic": {
-        "brightness": "high",
-        "saturation": "high",
-        "contrast": "high"
-    },
+def clamp(value):
+    return float(np.clip(value, 0.0, 1.0))
 
-    "mysterious": {
-        "brightness": "low",
-        "contrast": "medium_high",
-        "saturation": "low_medium"
-    },
-
-    "nostalgic": {
-        "warm_ratio": "high",
-        "saturation": "low_medium"
-    },
-
-    "romantic": {
-        "warm_ratio": "high",
-        "brightness": "medium_high",
-        "saturation": "medium"
-    },
-
-    "dramatic": {
-        "contrast": "high",
-        "brightness": "medium_low"
-    },
-
-    "hopeful": {
-        "brightness": "high",
-        "warm_ratio": "medium_high"
-    }
-}
-
-FEATURE_RANGES = {
-    "brightness": {
-        "low": (0, 85),
-        "medium": (85, 150),
-        "high": (150, 255),
-        "medium_high": (110, 200),
-        "medium_low": (50, 120)
-    },
-
-    "saturation": {
-        "low": (0, 70),
-        "medium": (70, 140),
-        "high": (140, 255),
-        "low_medium": (40, 120)
-    },
-
-    "warm_ratio": {
-        "low": (0, 0.25),
-        "medium": (0.25, 0.50),
-        "high": (0.50, 1.0),
-        "medium_high": (0.35, 0.75)
-    },
-
-    "contrast": {
-        "low": (0, 40),
-        "medium": (40, 75),
-        "high": (75, 150),
-        "medium_high": (60, 120)
-    }
-}
-
-def score_feature(value, feature_name, category):
-    lower, upper = FEATURE_RANGES[feature_name][category]
+def range_score(value, lower, upper, softness=0.10):
+    """
+        Continuous membership score.
+        Maximum score inside the preferred range.
+        Gradual penalty outside it.
+        """
     if lower <= value <= upper:
         return 1.0
-    return 0.0
+
+    distance = lower - value if value < lower else value - upper
+
+    return float(np.exp(-distance / softness))
+
+def gaussian_score(value, center, sigma):
+    return float(
+        np.exp(
+            -0.5 * ((value - center) / sigma) ** 2
+        )
+    )
 
 def calculate_visual_scores(features):
-    visual_scores = {}
-    for mood, rules in MOOD_RULES.items():
-        scores = []
-        for feature_name, category in rules.items():
-            value = features[feature_name]
-            score = score_feature(
-                value,
-                feature_name,
-                category
-            )
-            scores.append(score)
-        visual_scores[mood] = sum(scores) / len(scores)
-    return visual_scores
+
+    b = features["brightness"]
+    c = features["contrast"]
+    s = features["saturation"]
+    w = features["warm_ratio"]
+    e = features["edge_density"]
+    lc = features["local_contrast"]
+
+    # Normalize features to approximately 0-1
+    b /= 255
+    c /= 128
+    s /= 255
+    lc /= 128
+
+    scores = {}
+
+    # Individual feature memberships
+
+    bright = range_score(b, 0.50, 0.80)
+    dark = range_score(b, 0.05, 0.25)
+
+    saturated = range_score(s, 0.60, 0.90)
+    muted = range_score(s, 0.10, 0.35)
+
+    warm = range_score(w, 0.50, 0.85)
+    cool = range_score(w, 0.0, 0.20)
+
+    high_contrast = range_score(c, 0.50, 0.80)
+    soft_contrast = range_score(c, 0.05, 0.25)
+
+    high_edges = range_score(e, 0.10, 0.25, softness=0.025)
+    low_edges = range_score(e, 0.0, 0.04, softness=0.025)
+
+    high_local = range_score(lc, 0.40, 0.70)
+    low_local = range_score(lc, 0.05, 0.18)
+
+    serene_brightness = gaussian_score(b, center=0.46, sigma=0.24)
+    serene_saturation = gaussian_score(s, center=0.40, sigma=0.16)
+    serene_contrast = gaussian_score(c, center=0.36, sigma=0.20)
+    serene_local = gaussian_score(lc, center=0.24, sigma=0.17)
+    serene_edges = gaussian_score(e, center=0.035, sigma=0.055)
+
+    serene_memberships = {
+    "brightness": (serene_brightness, 0.10),
+    "saturation": (serene_saturation, 0.25),
+    "contrast": (serene_contrast, 0.15),
+    "local_contrast": (serene_local, 0.25),
+    "edge_density": (serene_edges, 0.25)
+    }
+
+    # print("\n--- FEATURE MEMBERSHIPS ---")
+
+    # for name, value in {
+    #     "bright": bright,
+    #     "dark": dark,
+    #     "saturated": saturated,
+    #     "muted": muted,
+    #     "warm": warm,
+    #     "cool": cool,
+    #     "high_contrast": high_contrast,
+    #     "soft_contrast": soft_contrast,
+    #     "high_edges": high_edges,
+    #     "low_edges": low_edges,
+    #     "high_local": high_local,
+    #     "low_local": low_local
+    # }.items():
+    #     print(f"{name}: {value:.3f}")
+
+    # Mood scoring
+
+    # scores["serene"] = (
+    #     0.20 * bright +
+    #     0.25 * soft_contrast +
+    #     0.25 * low_local +
+    #     0.30 * low_edges
+    # )
+
+    scores["serene"] = float(np.exp(sum(weight * np.log(max(score, 1e-8)) for score, weight in serene_memberships.values())))
+
+    scores["melancholic"] = (
+        0.35 * dark +
+        0.30 * muted +
+        0.20 * cool +
+        0.15 * soft_contrast
+    )
+
+    # scores["energetic"] = (
+    #     0.25 * bright +
+    #     0.25 * saturated +
+    #     0.25 * high_contrast +
+    #     0.25 * high_edges) * (
+    #     0.5 + 0.5 * max(high_contrast, high_edges)
+    # )
+
+    # scores["energetic"] = (
+    #     0.20 * bright +
+    #     0.30 * saturated +
+    #     0.25 * high_contrast +
+    #     0.25 * high_edges
+    # ) * (
+    #     0.4 + 0.6 * max(high_contrast, high_edges)
+    # )
+
+    # scores["energetic"] = (
+    #     bright *
+    #     saturated *
+    #     max(high_contrast, high_edges)
+    # ) ** (1 / 3)
+
+    scores["energetic"] = (
+        bright * saturated * high_contrast
+    ) ** (1 / 3) * (
+        0.8 + 0.2 * high_edges
+    )
+
+    scores["mysterious"] = (
+        0.30 * dark +
+        0.25 * high_contrast +
+        0.20 * muted +
+        0.25 * high_local
+    )
+
+    scores["nostalgic"] = (
+        0.35 * warm +
+        0.30 * muted +
+        0.20 * soft_contrast +
+        0.15 * low_local
+    )
+
+    scores["romantic"] = (
+        0.30 * warm +
+        0.25 * bright +
+        0.25 * soft_contrast +
+        0.20 * muted
+    )
+
+    scores["dramatic"] = (
+        0.30 * high_contrast +
+        0.25 * dark +
+        0.25 * high_local +
+        0.20 * high_edges
+    )
+
+    scores["hopeful"] = (
+        0.35 * bright +
+        0.25 * warm +
+        0.20 * saturated +
+        0.20 * low_local
+    )
+
+    return {mood: clamp(score) for mood, score in scores.items()}
+
+def normalize_clip_scores(clip_scores):
+    normalized = {}
+    clip_values = np.array(clip_scores)
+    # CLIP_LOW = np.percentile(clip_values, 5)
+    # CLIP_HIGH = np.percentile(clip_values, 95)
+    print("CLIP_LOW:", CLIP_LOW)
+    print("CLIP_HIGH:", CLIP_HIGH)
+    for mood, score in clip_scores.items():
+        normalized[mood] = float(np.clip((score - CLIP_LOW) /(CLIP_HIGH - CLIP_LOW),0,1))
+    return normalized
+
 
 def fuse_mood_scores(clip_scores, visual_scores, alpha=0.7):
-    # 1. Extract minimum and maximum CLIP scores
-    clip_values = list(clip_scores.values())
-    min_score = min(clip_values)
-    max_score = max(clip_values)
-    # 2. Normalize CLIP scores
-    normalized_clip = {}
-    for mood, score in clip_scores.items():
-        if max_score == min_score:
-            normalized_clip[mood] = 0.0
-        else:
-            normalized_clip[mood] = (
-                (score - min_score) / (max_score - min_score)
-            )
-    # 3. Combine CLIP and visual scores
+    # clip_values = list(clip_scores.values())
+    normalized_clip = normalize_clip_scores(clip_scores)
     final_scores = {}
+
     for mood in clip_scores:
         clip_score = normalized_clip[mood]
         visual_score = visual_scores[mood]
+
         final_scores[mood] = (
             alpha * clip_score +
             (1 - alpha) * visual_score
         )
-        
-    # 4. Sort moods by final score
-    final_scores = dict(
+
+    return dict(
         sorted(
             final_scores.items(),
             key=lambda item: item[1],
             reverse=True
         )
     )
-
-    return final_scores

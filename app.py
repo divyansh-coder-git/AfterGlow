@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import textwrap
 import cv2
 import numpy as np
@@ -7,8 +6,8 @@ import io
 import hashlib
 from explanation import generate_final_explanation
 from PIL import Image
-from comparison import render_comparison
-
+from comparison import render_comparison, display_comparison
+import time
 from vision_features import extract_features
 from clip_analyzer import analyze_mood, classify_image, encode_image
 from mood_fusion import (
@@ -17,6 +16,7 @@ from mood_fusion import (
 )
 from transformer import transform_image
 
+ALPHA = 0.5 #DO NOT TOUCh
 
 # =====================================================
 # PAGE CONFIGURATION
@@ -50,6 +50,28 @@ def load_image(image_bytes):
 
     return image_array, image_bgr
 
+def timed_call(name, function, *args, **kwargs):
+
+    start = time.perf_counter()
+
+    result = function(*args, **kwargs)
+
+    elapsed = time.perf_counter() - start
+
+    print(f"[PERFORMANCE] {name}: {elapsed:.3f}s")
+
+    return result
+
+def create_preview(image, max_size=(1200, 1200)):
+
+    preview = image.copy().convert("RGB")
+
+    preview.thumbnail(
+        max_size,
+        Image.Resampling.LANCZOS
+    )
+
+    return preview
 
 # =====================================================
 # CUSTOM CSS
@@ -198,7 +220,16 @@ uploaded_file = st.file_uploader(
     label_visibility="collapsed"
 )
 
+def get_top_moods(final_scores):
+    ranked_moods = list(final_scores.items())
 
+    return {
+        "primary_mood": ranked_moods[0][0],
+        "primary_score": ranked_moods[0][1],
+
+        "secondary_mood": ranked_moods[1][0],
+        "secondary_score": ranked_moods[1][1]
+    }
 # =====================================================
 # IMAGE PREVIEW
 # =====================================================
@@ -217,7 +248,7 @@ if uploaded_file is not None:
         st.session_state.pop("result", None)
         st.session_state.pop("original", None)
 
-    image_array, image_bgr = load_image(image_bytes)
+    image_array, image_bgr = timed_call("Loading image", load_image, image_bytes)
 
     image = Image.fromarray(image_array)
 
@@ -230,7 +261,7 @@ if uploaded_file is not None:
 
     st.image(
         image,
-        use_container_width=True
+        width='stretch'
     )
 
     st.markdown("")
@@ -241,7 +272,7 @@ if uploaded_file is not None:
 
     analyse = st.button(
         "✦  Discover the mood",
-        use_container_width=True
+        width='stretch'
     )
 
     if analyse:
@@ -256,14 +287,6 @@ if uploaded_file is not None:
             # -----------------------------------------
 
             status.markdown("🔍 Preparing your image...")
-
-            image_array = np.array(image)
-
-            image_bgr = cv2.cvtColor(
-                image_array,
-                cv2.COLOR_RGB2BGR
-            )
-
             progress.progress(10)
 
 
@@ -275,9 +298,8 @@ if uploaded_file is not None:
                 "🧠 Understanding what your image represents..."
             )
 
-            context = classify_image(image_bgr)
-
-            image_features = encode_image(image_bgr)
+            image_features = timed_call("Encode Image", encode_image, image_bgr)
+            context = timed_call("CLIP Classify Image", classify_image, image_bgr, image_features)
 
             progress.progress(30)
 
@@ -292,40 +314,41 @@ if uploaded_file is not None:
                     "🎨 Interpreting its emotional atmosphere..."
                 )
 
-                features = extract_features(image_bgr)
+                features = timed_call("Extract features", extract_features, image_bgr)
 
                 progress.progress(50)
 
-                clip_scores = analyze_mood(
-                    image_bgr,
-                    image_features
-                )
+                clip_scores = timed_call("CLIP Ananlyze Mood", analyze_mood, image_bgr, image_features)
 
                 progress.progress(70)
 
-                visual_scores = calculate_visual_scores(
-                    features
-                )
+                visual_scores = timed_call("Calculate visual score", calculate_visual_scores, features)
 
-                final_scores = fuse_mood_scores(
-                    clip_scores,
-                    visual_scores
-                )
-
-                dominant_mood = next(iter(final_scores))
-
-                explanation = generate_final_explanation(dominant_mood, features)
+                final_scores = timed_call("CLIP Fuse mood scores",fuse_mood_scores,clip_scores, visual_scores, alpha=ALPHA)
                 
+                mood_results = timed_call("Get top moods",get_top_moods,final_scores)
+                primary_mood = mood_results["primary_mood"]
+                secondary_mood = mood_results["secondary_mood"]
+
+                explanation = timed_call("Generate Final Explanation", generate_final_explanation, primary_mood, features)
+
                 status.markdown(
                     "✨ Creating your artistic transformation..."
                 )
 
-                transformed_image = transform_image(
-                    image_bgr,
-                    dominant_mood
-                )
+                with st.spinner("✨ Applying mood-guided transformation..."):
+                    transformed_image = timed_call("Image Transformation",transform_image,image_bgr,primary_mood)
 
-                progress.progress(100)
+                transformed_rgb = cv2.cvtColor(transformed_image,cv2.COLOR_BGR2RGB)
+                transformed_pil = Image.fromarray(transformed_rgb)
+                preview_original = create_preview(image)
+                preview_transformed = create_preview(transformed_pil)
+                html = timed_call("Render Comparision", render_comparison, preview_original, preview_transformed)
+
+                success, encoded_image = cv2.imencode(".png",transformed_image)
+                if not success:
+                    raise RuntimeError("Failed to encode transformed image.")
+                download_bytes = encoded_image.tobytes()
 
                 result = {
                     "context": context,
@@ -333,11 +356,16 @@ if uploaded_file is not None:
                     "clip_scores": clip_scores,
                     "visual_scores": visual_scores,
                     "final_scores": final_scores,
-                    "dominant_mood": dominant_mood,
+                    "primary_mood": primary_mood,
+                    "secondary_mood": secondary_mood,
                     "transformed_image": transformed_image,
                     "is_expressive": True,
-                    "explanation": explanation
+                    "explanation": explanation,
+                    "comparison_html": html,
+                    "download_bytes": download_bytes
                 }
+
+                progress.progress(100)
 
             else:
 
@@ -351,8 +379,6 @@ if uploaded_file is not None:
 
             st.session_state["result"] = result
             st.session_state["original"] = image
-
-            status.success("Your image has been interpreted!")
 
         except Exception as e:
 
@@ -368,27 +394,123 @@ if "result" in st.session_state:
     result = st.session_state["result"]
     context = result["context"]
 
-    st.markdown("---")
+    # =================================================
+    # IMAGE CATEGORY CARD
+    # =================================================
 
-    st.markdown("## What are we looking at?")
+    CATEGORY_INFO = {
+        "landscape": ("🏞️", "Natural Landscape"),
+        "nature": ("🌿", "Nature & Flora"),
+        "portrait": ("👤", "Portrait"),
+        "architecture": ("🏛️", "Architecture"),
+        "abstract_art": ("🎨", "Abstract Art"),
+        "cityscape": ("🌆", "Cityscape"),
+        "technical_diagram": ("⚙️", "Technical Diagram"),
+        "scientific_diagram": ("🔬", "Scientific Illustration"),
+        "document": ("📄", "Document")
+    }
 
-    st.markdown(
-        f"""
-        **Detected category:** {context['category'].replace('_', ' ').title()}
-        """
+    category = context["category"]
+
+    icon, category_label = CATEGORY_INFO.get(
+        category,
+        ("🖼️", category.replace("_", " ").title())
     )
 
+    category_card = f"""
+    <div style="
+        display: flex;
+        align-items: center;
+        gap: 22px;
+        background: linear-gradient(115deg, #10252D, #111827);
+        border: 1px solid #287D86;
+        border-radius: 18px;
+        padding: 24px 30px;
+        margin: 20px 0;
+    ">
+
+        <div style="
+            font-size: 43px;
+            background: #173943;
+            border: 1px solid #287D86;
+            border-radius: 14px;
+            width: 75px;
+            height: 75px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        ">
+            {icon}
+        </div>
+
+        <div style="flex-grow: 1; min-width: 0;">
+
+            <p style="
+                color: #67E8F9;
+                letter-spacing: 3px;
+                font-size: 12px;
+                font-weight: 700;
+                margin: 0 0 8px 0;
+            ">
+                VISUAL CONTEXT DETECTED
+            </p>
+
+            <h2 style="
+                color: #F8FAFC;
+                font-size: 30px;
+                font-weight: 750;
+                margin: 0;
+            ">
+                {category_label}
+            </h2>
+
+            <p style="
+                color: #94A3B8;
+                font-size: 13px;
+                margin: 7px 0 0 0;
+            ">
+                What AFTERGLOW sees in your image.
+            </p>
+
+        </div>
+
+        <div style="
+            text-align: right;
+            flex-shrink: 0;
+        ">
+            <p style="
+                color: #94A3B8;
+                font-size: 11px;
+                margin: 0 0 5px 0;
+            ">
+                CLIP MATCH
+            </p>
+
+            <h3 style="
+                color: #67E8F9;
+                font-size: 23px;
+                margin: 0;
+            ">
+                {context["top_score"]:.3f}
+            </h3>
+        </div>
+
+    </div>
+    """
+
+    st.html(category_card)
+
     st.caption(
-        f"Category similarity: {context['top_score']:.3f} "
-        f"| Margin over second category: {context['margin']:.3f}"
+        f"Similarity margin over the next category: {context['margin']:.3f}"
     )
 
     with st.expander("Explore category analysis"):
 
-        for category, score in context["scores"].items():
+        for category_name, score in context["scores"].items():
 
             st.write(
-                f"**{category.replace('_', ' ').title()}**: {score:.3f}"
+                f"**{category_name.replace('_', ' ').title()}**: {score:.3f}"
             )
 
     if not result["is_expressive"]:
@@ -410,15 +532,9 @@ if "result" in st.session_state:
         )
 
     else:
-
-        # KEEP YOUR EXISTING MOOD INTERPRETATION,
-        # MOOD SPECTRUM, TRANSFORMATION AND DOWNLOAD
-        # SECTIONS INSIDE THIS ELSE BLOCK.
-
-        dominant_mood = result["dominant_mood"]
+        primary_mood = result["primary_mood"]
+        secondary_mood = result["secondary_mood"]
         final_scores = result["final_scores"]
-
-        # Anchor for automatic scrolling
 
         st.markdown(
             '<div id="afterglow-results"></div>',
@@ -455,7 +571,7 @@ if "result" in st.session_state:
                 text-transform: capitalize;
                 margin: 0;
             ">
-                {dominant_mood}
+                {primary_mood} || {secondary_mood}
             </h1>
 
             <p style="color: #94A3B8;">
@@ -506,19 +622,7 @@ if "result" in st.session_state:
             "into a visual experience."
         )
 
-        original_image = st.session_state["original"]
-
-        transformed_bgr = result["transformed_image"]
-
-        transformed_rgb = cv2.cvtColor(
-            transformed_bgr,
-            cv2.COLOR_BGR2RGB
-        )
-
-        transformed_pil = Image.fromarray(transformed_rgb)
-        # print("Original:", type(original_image))
-        # print("Transformed:", type(transformed_pil))
-        render_comparison(original_image, transformed_pil)
+        display_comparison(result["comparison_html"])
 
         st.markdown("### Experience the transformation")
         
@@ -537,7 +641,7 @@ if "result" in st.session_state:
         # with col2:
 
         #     st.markdown(
-        #         f"### AFTERGLOW · {dominant_mood.capitalize()}"
+        #         f"### AFTERGLOW · {primary_mood.capitalize()}"
         #     )
 
         #     st.image(
@@ -551,19 +655,14 @@ if "result" in st.session_state:
         # DOWNLOAD TRANSFORMATION
         # =================================================
 
-        success, encoded_image = cv2.imencode(
-            ".png",
-            transformed_bgr
-        )
 
-        if success:
-            st.download_button(
-                label="↓  Download your AFTERGLOW image",
-                data=encoded_image.tobytes(),
-                file_name=f"afterglow_{dominant_mood}.png",
-                mime="image/png",
-                use_container_width=True
-            )
+        st.download_button(
+            label="↓ Download your AFTERGLOW image",
+            data=result["download_bytes"],
+            file_name=f"afterglow_{primary_mood}_{secondary_mood}.png",
+            mime="image/png",
+            width="stretch"
+        )
 
         # =================================================
         # VISUAL FINGERPRINT
@@ -643,7 +742,7 @@ if "result" in st.session_state:
         # AUTOMATIC SCROLL
         # =================================================
 
-        components.html(
+        st.iframe(
             """
             <script>
 
@@ -663,6 +762,5 @@ if "result" in st.session_state:
                 }
 
             </script>
-            """,
-            height=0
+            """
         )

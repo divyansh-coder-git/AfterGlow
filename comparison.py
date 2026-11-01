@@ -1,18 +1,17 @@
 from PIL import Image
 import base64
 from io import BytesIO
-import streamlit.components.v1 as components
-
+import streamlit as st
 
 def image_to_base64(image):
     buffer = BytesIO()
-    image.save(buffer, format="PNG")
+    image.save(buffer, format="JPEG", quality=82, optimize=False)
 
     encoded = base64.b64encode(
         buffer.getvalue()
     ).decode("utf-8")
 
-    return f"data:image/png;base64,{encoded}"
+    return f"data:image/jpeg;base64,{encoded}"
 
 def render_comparison(original, transformed):
 
@@ -20,8 +19,15 @@ def render_comparison(original, transformed):
     transformed_src = image_to_base64(transformed)
     html = f"""
     <style>
-        * {{
-            box-sizing: border-box;
+        html, body {{
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+            width: 100%;
+        }}
+
+        body {{
+            overflow-y: hidden !important;
         }}
 
         .comparison-container {{
@@ -140,6 +146,8 @@ def render_comparison(original, transformed):
         }});
     </script>
     """
-    
 
-    components.html(html, height=500)
+    return html
+
+def display_comparison(html):
+    st.iframe(html, height='content')
